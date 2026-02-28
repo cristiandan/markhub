@@ -1,36 +1,189 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Markhub
 
-## Getting Started
+**Share and discover agent markdown files.**
 
-First, run the development server:
+Markhub is a GitHub-like platform for sharing markdown files—specifically designed for AI agents, system prompts, and configuration files. Think of it as "GitHub Gist meets ClawdHub" with first-class support for agent-related content.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+🌐 **Website:** [markhub.md](https://markhub.md)
+
+## Features
+
+- 📝 **Upload & Share** — Publish your agent configs, AGENTS.md files, and prompts
+- 🔍 **Discover** — Browse and search community-shared markdown files
+- ⭐ **Star & Comment** — Engage with files you find useful
+- 🔒 **Visibility Controls** — Public, unlisted, or private files
+- 💻 **CLI Support** — Push and pull files from the command line
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Framework | Next.js 14 (App Router) |
+| Language | TypeScript (strict mode) |
+| Database | PostgreSQL |
+| ORM | Prisma |
+| Styling | Tailwind CSS |
+| Auth | NextAuth.js + GitHub OAuth |
+| Hosting | Render |
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── (auth)/            # Auth-required routes
+│   │   └── dashboard/     # User's file management
+│   ├── (public)/          # Public routes
+│   │   └── [username]/    # Profile and file views
+│   └── api/               # API routes
+│       └── health/        # Health check endpoint
+├── components/            # React components
+├── lib/                   # Shared utilities
+│   ├── auth.ts           # Authentication helpers
+│   ├── db.ts             # Database client
+│   └── utils.ts          # General utilities (cn, etc.)
+└── prisma/
+    └── schema.prisma     # Database schema
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## URL Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Route | Description |
+|-------|-------------|
+| `/` | Landing page |
+| `/explore` | Search and browse files |
+| `/dashboard` | Your files (requires auth) |
+| `/settings` | Profile settings (requires auth) |
+| `/[username]` | Public profile |
+| `/[username]/[...path]` | View file (e.g., `/john/agents/memory.md`) |
+| `/[username]/[...path]/raw` | Raw markdown view |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database Schema
 
-## Learn More
+```prisma
+model User {
+  id        String   @id @default(cuid())
+  githubId  Int      @unique
+  username  String   @unique
+  name      String?
+  avatar    String?
+  bio       String?
+  files     File[]
+  stars     Star[]
+  comments  Comment[]
+  createdAt DateTime @default(now())
+}
 
-To learn more about Next.js, take a look at the following resources:
+model File {
+  id         String     @id @default(cuid())
+  userId     String
+  path       String     // e.g., "agents.md" or "project/memory.md"
+  content    String
+  visibility Visibility @default(PUBLIC)
+  stars      Star[]
+  comments   Comment[]
+  starCount  Int        @default(0)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  
+  @@unique([userId, path])
+}
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+model Star {
+  userId    String
+  fileId    String
+  createdAt DateTime @default(now())
+  
+  @@id([userId, fileId])
+}
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  fileId    String
+  content   String
+  createdAt DateTime @default(now())
+}
 
-## Deploy on Vercel
+enum Visibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## CLI (Coming Soon)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+markhub login              # GitHub device flow
+markhub logout             # Clear local token
+markhub whoami             # Show logged in user
+markhub list               # List your files
+markhub push <file>        # Upload file
+markhub pull <user/path>   # Download file
+```
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL (local or remote)
+- GitHub OAuth app credentials
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/cristiandan/markhub.git
+   cd markhub
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment**
+   ```bash
+   cp .env.example .env.local
+   # Edit .env.local with your credentials
+   ```
+
+4. **Set up the database**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+5. **Start development server**
+   ```bash
+   npm run dev
+   ```
+
+6. **Open the app**
+   ```
+   http://localhost:3000
+   ```
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm start` | Start production server |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Format code with Prettier |
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## License
+
+MIT
+
+---
+
+Built with ❤️ for the agent community.
