@@ -1,5 +1,6 @@
 // Markhub Prisma Schema
 // Database: PostgreSQL on Render
+// Designed: P1-06
 
 generator client {
   provider = "prisma-client-js"
@@ -10,9 +11,127 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Models will be added in P1-08 (Database schema design)
-// Initial models planned:
-// - User (GitHub OAuth)
-// - Repository (markdown file collections)
-// - File (individual markdown files)
-// - Star (user favorites)
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// File visibility levels
+/// - PUBLIC: Visible to everyone, appears in search/explore
+/// - UNLISTED: Accessible via direct link, not in search/explore
+/// - PRIVATE: Only visible to owner
+enum Visibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+// =============================================================================
+// MODELS
+// =============================================================================
+
+/// User model - authenticated via GitHub OAuth
+/// Primary identifier is GitHub username for URL routing (/[username]/...)
+model User {
+  id        String   @id @default(cuid())
+  githubId  Int      @unique                // GitHub user ID (stable, unlike username)
+  username  String   @unique                // GitHub username (for URLs)
+  name      String?                         // Display name
+  avatar    String?                         // GitHub avatar URL
+  bio       String?                         // User bio/description
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  files    File[]
+  stars    Star[]
+  comments Comment[]
+
+  @@index([username])
+}
+
+/// File model - individual markdown documents
+/// Path supports nested structure: "agents.md" or "projects/markhub/README.md"
+/// Content stored directly in Postgres (suitable for markdown files)
+model File {
+  id         String     @id @default(cuid())
+  userId     String
+  path       String                         // File path (e.g., "agents.md", "dir/file.md")
+  content    String                         // Markdown content (stored as text)
+  visibility Visibility @default(PUBLIC)
+  starCount  Int        @default(0)         // Denormalized for efficient sorting
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stars    Star[]
+  comments Comment[]
+
+  // Constraints
+  @@unique([userId, path])                  // User can't have duplicate paths
+  @@index([userId])
+  @@index([visibility, starCount])          // For explore/trending queries
+  @@index([visibility, createdAt])          // For recent public files
+}
+
+/// Star model - users can star files they like
+/// Composite primary key prevents duplicate stars
+model Star {
+  userId    String
+  fileId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([userId, fileId])
+  @@index([fileId])                         // For counting stars on a file
+}
+
+/// Comment model - discussion on files
+/// Markdown content supported for rich comments
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  fileId    String
+  content   String                          // Markdown comment content
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId, createdAt])              // For listing comments on a file
+  @@index([userId])                         // For user's comment history
+}
+
+// =============================================================================
+// DESIGN NOTES
+// =============================================================================
+// 
+// 1. CUID over UUID: Shorter, URL-friendly, still collision-resistant
+// 
+// 2. Cascading deletes: When a user is deleted, their files/stars/comments go too
+//    When a file is deleted, its stars/comments are removed
+// 
+// 3. Denormalized starCount: Avoids COUNT(*) on every file card render
+//    Updated via transaction when stars are added/removed
+// 
+// 4. Index strategy:
+//    - username: Fast profile lookups
+//    - userId on File: Dashboard queries
+//    - visibility + starCount: Trending/popular queries
+//    - visibility + createdAt: Recent files queries
+//    - fileId on Star: Star counting
+//    - fileId + createdAt on Comment: Chronological comment listing
+// 
+// 5. Path uniqueness: Per-user path uniqueness allows same filename across users
+//    Supports nested paths for future directory structure
+// 
+// 6. Future considerations:
+//    - File versions (add FileVersion model with file snapshots)
+//    - Forks (add forkOf relation to File)
+//    - Collections (add Collection and FileCollection models)
+//    - API tokens (add ApiToken model linked to User)
