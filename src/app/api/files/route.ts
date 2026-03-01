@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { Visibility } from '@prisma/client';
+import { validateMarkdown, sanitizeMarkdown } from '@/lib/sanitize';
 
 // =============================================================================
 // TYPES
@@ -126,21 +127,17 @@ export async function POST(request: NextRequest) {
 
     const normalizedPath = path.trim();
 
-    // Validate content
-    if (!content || typeof content !== 'string') {
+    // Validate content using markdown validation
+    const contentValidation = validateMarkdown(content);
+    if (!contentValidation.valid) {
       return NextResponse.json(
-        { error: 'Content is required' },
+        { error: contentValidation.error },
         { status: 400 }
       );
     }
 
-    if (content.length > 1_000_000) {
-      // 1MB limit for markdown content
-      return NextResponse.json(
-        { error: 'Content exceeds maximum size (1MB)' },
-        { status: 400 }
-      );
-    }
+    // Sanitize content to prevent XSS
+    const sanitizedContent = sanitizeMarkdown(content);
 
     // Validate visibility
     if (!validateVisibility(visibility)) {
@@ -168,12 +165,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the file
+    // Create the file with sanitized content
     const file = await db.file.create({
       data: {
         userId,
         path: normalizedPath,
-        content,
+        content: sanitizedContent,
         visibility,
       },
       select: {
