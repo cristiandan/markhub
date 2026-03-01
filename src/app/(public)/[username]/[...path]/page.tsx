@@ -119,7 +119,7 @@ export default async function FilePage({ params }: FilePageProps) {
       <div className="rounded-lg border border-[var(--border)] bg-[var(--card)]">
         {/* Action bar (client component for copy functionality) */}
         <FileActions
-          rawUrl={`/${user.username}/${file.path}/raw`}
+          rawUrl={`/api/raw/${user.username}/${file.path}`}
           content={file.content}
         />
 
