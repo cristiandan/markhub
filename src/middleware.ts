@@ -2,11 +2,17 @@
  * Next.js Middleware for authentication.
  * Protects routes that require authentication.
  *
+ * Note: NextAuth.js v5's auth() middleware requires Node.js runtime
+ * due to crypto dependencies from JWT/Prisma operations.
+ *
  * @see https://authjs.dev/getting-started/session-management/protecting#nextjs-middleware
  */
 
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
+
+// Force Node.js runtime (Edge runtime doesn't support crypto module)
+export const runtime = 'nodejs';
 
 /**
  * Routes that require authentication.
