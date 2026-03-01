@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { SessionProvider } from '@/components/auth/SessionProvider';
 import { ThemeProvider } from '@/components/theme';
+import { Header } from '@/components/layout';
 import './globals.css';
 
 const geistSans = Geist({
@@ -28,9 +29,12 @@ export default function RootLayout({
     // suppressHydrationWarning required by next-themes to prevent
     // hydration mismatch when theme is loaded from localStorage
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <ThemeProvider>
-          <SessionProvider>{children}</SessionProvider>
+          <SessionProvider>
+            <Header />
+            <main className="flex-1">{children}</main>
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>
