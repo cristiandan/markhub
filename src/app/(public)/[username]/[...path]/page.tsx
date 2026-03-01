@@ -1,0 +1,281 @@
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { auth } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { FileActions } from '@/components/file';
+
+/**
+ * Public file view page.
+ *
+ * Routes: /{username}/{path} where path can be nested (e.g., /user/folder/file.md)
+ *
+ * Visibility rules:
+ * - PUBLIC: Visible to everyone
+ * - UNLISTED: Visible to everyone (via direct link)
+ * - PRIVATE: Only visible to owner
+ */
+
+interface FilePageProps {
+  params: Promise<{
+    username: string;
+    path: string[];
+  }>;
+}
+
+export default async function FilePage({ params }: FilePageProps) {
+  const { username, path: pathSegments } = await params;
+  const filePath = pathSegments.join('/');
+
+  // Look up the user
+  const user = await db.user.findUnique({
+    where: { username },
+    select: {
+      id: true,
+      username: true,
+      name: true,
+      avatar: true,
+    },
+  });
+
+  if (!user) {
+    notFound();
+  }
+
+  // Look up the file
+  const file = await db.file.findUnique({
+    where: {
+      userId_path: {
+        userId: user.id,
+        path: filePath,
+      },
+    },
+    select: {
+      id: true,
+      path: true,
+      content: true,
+      visibility: true,
+      starCount: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!file) {
+    notFound();
+  }
+
+  // Check visibility
+  if (file.visibility === 'PRIVATE') {
+    const session = await auth();
+    if (!session?.user?.id || session.user.id !== user.id) {
+      notFound();
+    }
+  }
+
+  // File is visible (PUBLIC, UNLISTED, or PRIVATE owner viewing)
+  return (
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] mb-2">
+          <Link
+            href={`/${user.username}`}
+            className="inline-flex items-center gap-2 hover:text-[var(--foreground)] transition-colors"
+          >
+            {user.avatar && (
+              <img
+                src={user.avatar}
+                alt={user.name || user.username}
+                className="h-5 w-5 rounded-full"
+              />
+            )}
+            <span>{user.username}</span>
+          </Link>
+          <span>/</span>
+          <span className="text-[var(--foreground)]">{file.path}</span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{getFileName(file.path)}</h1>
+          <div className="flex items-center gap-4">
+            <span
+              className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]"
+              title={`${file.starCount} star${file.starCount !== 1 ? 's' : ''}`}
+            >
+              <StarIcon className="h-4 w-4" />
+              {file.starCount}
+            </span>
+            <VisibilityBadge visibility={file.visibility} />
+          </div>
+        </div>
+
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Updated {formatRelativeTime(file.updatedAt)}
+        </p>
+      </div>
+
+      {/* Content */}
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)]">
+        {/* Action bar (client component for copy functionality) */}
+        <FileActions
+          rawUrl={`/${user.username}/${file.path}/raw`}
+          content={file.content}
+        />
+
+        {/* Markdown content (raw for now, P2-06 will add rendering) */}
+        <pre className="overflow-x-auto p-4 text-sm font-mono whitespace-pre-wrap break-words">
+          {file.content}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Extract filename from path.
+ */
+function getFileName(path: string): string {
+  const segments = path.split('/');
+  return segments[segments.length - 1];
+}
+
+/**
+ * Format a date as relative time.
+ */
+function formatRelativeTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) {
+    return 'just now';
+  } else if (diffMins < 60) {
+    return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
+  } else if (diffHours < 24) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  } else if (diffDays === 1) {
+    return 'yesterday';
+  } else if (diffDays < 30) {
+    return `${diffDays} days ago`;
+  } else {
+    return date.toLocaleDateString();
+  }
+}
+
+/**
+ * Visibility badge component.
+ */
+function VisibilityBadge({
+  visibility,
+}: {
+  visibility: 'PUBLIC' | 'UNLISTED' | 'PRIVATE';
+}) {
+  const config = {
+    PUBLIC: {
+      label: 'Public',
+      icon: GlobeIcon,
+      className: 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950',
+    },
+    UNLISTED: {
+      label: 'Unlisted',
+      icon: LinkIcon,
+      className:
+        'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-950',
+    },
+    PRIVATE: {
+      label: 'Private',
+      icon: LockIcon,
+      className: 'text-[var(--muted-foreground)] bg-[var(--muted)]',
+    },
+  };
+
+  const { label, icon: Icon, className } = config[visibility];
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
+
+// =============================================================================
+// ICONS
+// =============================================================================
+
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
