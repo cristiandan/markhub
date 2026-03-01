@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { FileActions } from '@/components/file';
+import { MarkdownRenderer } from '@/components/markdown';
 
 /**
  * Public file view page.
@@ -122,10 +123,10 @@ export default async function FilePage({ params }: FilePageProps) {
           content={file.content}
         />
 
-        {/* Markdown content (raw for now, P2-06 will add rendering) */}
-        <pre className="overflow-x-auto p-4 text-sm font-mono whitespace-pre-wrap break-words">
-          {file.content}
-        </pre>
+        {/* Rendered markdown content */}
+        <div className="p-6">
+          <MarkdownRenderer content={file.content} />
+        </div>
       </div>
     </div>
   );
