@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { FileActions } from '@/components/file';
+import { FileActions, StarButton } from '@/components/file';
 import { MarkdownRenderer } from '@/components/markdown';
 
 /**
@@ -99,13 +99,7 @@ export default async function FilePage({ params }: FilePageProps) {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">{getFileName(file.path)}</h1>
           <div className="flex items-center gap-4">
-            <span
-              className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]"
-              title={`${file.starCount} star${file.starCount !== 1 ? 's' : ''}`}
-            >
-              <StarIcon className="h-4 w-4" />
-              {file.starCount}
-            </span>
+            <StarButton fileId={file.id} initialStarCount={file.starCount} />
             <VisibilityBadge visibility={file.visibility} />
           </div>
         </div>
@@ -208,23 +202,6 @@ function VisibilityBadge({
 // =============================================================================
 // ICONS
 // =============================================================================
-
-function StarIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
 
 function GlobeIcon({ className }: { className?: string }) {
   return (
