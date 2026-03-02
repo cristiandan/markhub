@@ -2,7 +2,7 @@
  * API route for file operations.
  *
  * POST /api/files - Create a new file
- * Requires authentication.
+ * Requires authentication (session or Bearer token).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +10,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { Visibility } from '@prisma/client';
 import { validateMarkdown, sanitizeMarkdown } from '@/lib/sanitize';
+import { extractBearerToken, verifyCliToken } from '@/lib/cli-token';
 
 // =============================================================================
 // TYPES
@@ -89,19 +90,38 @@ function validateVisibility(visibility: unknown): visibility is Visibility {
 // POST /api/files - Create a new file
 // =============================================================================
 
+/**
+ * Authenticate a request via session or Bearer token.
+ * Returns user ID if authenticated, null otherwise.
+ */
+async function authenticateRequest(request: NextRequest): Promise<string | null> {
+  // First, try Bearer token (CLI)
+  const authHeader = request.headers.get('Authorization');
+  const token = extractBearerToken(authHeader);
+  
+  if (token) {
+    const userId = await verifyCliToken(token);
+    if (userId) {
+      return userId;
+    }
+  }
+  
+  // Fall back to session auth (web)
+  const session = await auth();
+  return session?.user?.id ?? null;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
-    const session = await auth();
+    // Authenticate user (session or Bearer token)
+    const userId = await authenticateRequest(request);
 
-    if (!session?.user?.id) {
+    if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
-
-    const userId = session.user.id;
 
     // Parse request body
     let body: CreateFileBody;
