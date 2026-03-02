@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { FileActions, StarButton } from '@/components/file';
+import { CommentsSection, FileActions, StarButton } from '@/components/file';
 import { MarkdownRenderer } from '@/components/markdown';
 
 /**
@@ -65,10 +65,13 @@ export default async function FilePage({ params }: FilePageProps) {
     notFound();
   }
 
-  // Check visibility
+  // Get current user session (for visibility check and comment ownership)
+  const session = await auth();
+  const currentUserId = session?.user?.id;
+
+  // Check visibility - PRIVATE files only visible to owner
   if (file.visibility === 'PRIVATE') {
-    const session = await auth();
-    if (!session?.user?.id || session.user.id !== user.id) {
+    if (!currentUserId || currentUserId !== user.id) {
       notFound();
     }
   }
@@ -122,6 +125,9 @@ export default async function FilePage({ params }: FilePageProps) {
           <MarkdownRenderer content={file.content} />
         </div>
       </div>
+
+      {/* Comments */}
+      <CommentsSection fileId={file.id} currentUserId={currentUserId} />
     </div>
   );
 }
