@@ -1,6 +1,7 @@
 /**
  * API route for file operations.
  *
+ * GET /api/files - List user's files
  * POST /api/files - Create a new file
  * Requires authentication (session or Bearer token).
  */
@@ -11,6 +12,82 @@ import { db } from '@/lib/db';
 import { Visibility } from '@prisma/client';
 import { validateMarkdown, sanitizeMarkdown } from '@/lib/sanitize';
 import { extractBearerToken, verifyCliToken } from '@/lib/cli-token';
+
+// =============================================================================
+// GET /api/files - List user's files
+// =============================================================================
+
+export async function GET(request: NextRequest) {
+  try {
+    // Authenticate user (session or Bearer token)
+    const userId = await authenticateRequest(request);
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const visibility = searchParams.get('visibility'); // Optional: filter by visibility
+
+    // Build where clause
+    const where: { userId: string; visibility?: Visibility } = { userId };
+    
+    if (visibility && validateVisibility(visibility)) {
+      where.visibility = visibility;
+    }
+
+    // Fetch user's files
+    const files = await db.file.findMany({
+      where,
+      select: {
+        id: true,
+        path: true,
+        visibility: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            stars: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    // Get username for URL construction
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
+    });
+
+    const username = user?.username ?? 'unknown';
+
+    // Format response
+    const formattedFiles = files.map((file) => ({
+      id: file.id,
+      path: file.path,
+      visibility: file.visibility,
+      url: `/${username}/${file.path}`,
+      stars: file._count.stars,
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt,
+    }));
+
+    return NextResponse.json({ files: formattedFiles });
+  } catch (error) {
+    console.error('GET /api/files error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
 
 // =============================================================================
 // TYPES
