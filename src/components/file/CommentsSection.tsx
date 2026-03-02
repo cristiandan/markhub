@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
+import { MarkdownRenderer } from '@/components/markdown/MarkdownRenderer';
 
 /**
  * Comment data structure from API.
@@ -43,6 +44,7 @@ export function CommentsSection({ fileId, currentUserId }: CommentsSectionProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
+  const [showPreview, setShowPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -114,6 +116,7 @@ export function CommentsSection({ fileId, currentUserId }: CommentsSectionProps)
       const comment = await response.json();
       setComments((prev) => [...prev, comment]);
       setNewComment('');
+      setShowPreview(false);
       
       // Reset textarea height
       if (textareaRef.current) {
@@ -250,22 +253,75 @@ export function CommentsSection({ fileId, currentUserId }: CommentsSectionProps)
               )}
             </div>
 
-            {/* Input area */}
+            {/* Input area with preview toggle */}
             <div className="flex-1">
-              <textarea
-                ref={textareaRef}
-                value={newComment}
-                onChange={handleTextareaChange}
-                placeholder="Write a comment..."
-                rows={1}
-                maxLength={10000}
-                disabled={isSubmitting}
-                className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent disabled:opacity-50"
-              />
+              {/* Write/Preview tabs */}
+              <div className="flex border-b border-[var(--border)] mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    !showPreview
+                      ? 'border-[var(--primary)] text-[var(--foreground)]'
+                      : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <EditIcon className="h-4 w-4" />
+                    Write
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(true)}
+                  className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    showPreview
+                      ? 'border-[var(--primary)] text-[var(--foreground)]'
+                      : 'border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <EyeIcon className="h-4 w-4" />
+                    Preview
+                  </span>
+                </button>
+              </div>
+
+              {/* Textarea or Preview */}
+              {showPreview ? (
+                <div className="min-h-[80px] rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+                  {newComment.trim() ? (
+                    <MarkdownRenderer content={newComment} className="text-sm" />
+                  ) : (
+                    <p className="text-sm text-[var(--muted-foreground)] italic">
+                      Nothing to preview
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  ref={textareaRef}
+                  value={newComment}
+                  onChange={handleTextareaChange}
+                  placeholder="Write a comment... (Markdown supported)"
+                  rows={3}
+                  maxLength={10000}
+                  disabled={isSubmitting}
+                  className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent disabled:opacity-50"
+                />
+              )}
               
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs text-[var(--muted-foreground)]">
-                  {newComment.length > 0 && `${newComment.length}/10,000`}
+                  {newComment.length > 0 ? (
+                    <>
+                      {newComment.length.toLocaleString()}/10,000
+                      <span className="mx-2">·</span>
+                      <span>Markdown supported</span>
+                    </>
+                  ) : (
+                    'Supports **bold**, *italic*, `code`, and more'
+                  )}
                 </span>
                 
                 <button
@@ -365,9 +421,9 @@ function CommentCard({
             </button>
           )}
         </div>
-        <p className="mt-1 text-sm whitespace-pre-wrap break-words">
-          {comment.content}
-        </p>
+        <div className="mt-1 text-sm">
+          <MarkdownRenderer content={comment.content} className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+        </div>
       </div>
     </div>
   );
@@ -416,6 +472,42 @@ function CommentIcon({ className }: { className?: string }) {
       className={className}
     >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function EditIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function EyeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
