@@ -52,14 +52,15 @@ model User {
 /// Path supports nested structure: "agents.md" or "projects/markhub/README.md"
 /// Content stored directly in Postgres (suitable for markdown files)
 model File {
-  id         String     @id @default(cuid())
-  userId     String
-  path       String                         // File path (e.g., "agents.md", "dir/file.md")
-  content    String                         // Markdown content (stored as text)
-  visibility Visibility @default(PUBLIC)
-  starCount  Int        @default(0)         // Denormalized for efficient sorting
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id           String                       @id @default(cuid())
+  userId       String
+  path         String                       // File path (e.g., "agents.md", "dir/file.md")
+  content      String                       // Markdown content (stored as text)
+  visibility   Visibility                   @default(PUBLIC)
+  starCount    Int                          @default(0)  // Denormalized for efficient sorting
+  searchVector Unsupported("tsvector")?     // Full-text search vector (path + content)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
 
   // Relations
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
