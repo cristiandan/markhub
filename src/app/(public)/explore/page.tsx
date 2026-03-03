@@ -8,6 +8,7 @@ import Link from 'next/link';
  *
  * Features:
  * - Full-text search with highlighted snippets
+ * - Trending/popular files section (top starred)
  * - Results display with author info and star counts
  * - Pagination (load more)
  * - Empty states for no query and no results
@@ -21,7 +22,29 @@ export default function ExplorePage() {
   const [offset, setOffset] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // Trending files state
+  const [trendingFiles, setTrendingFiles] = useState<TrendingFile[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
+
   const LIMIT = 20;
+
+  // Fetch trending files on mount
+  useEffect(() => {
+    async function fetchTrending() {
+      try {
+        const res = await fetch('/api/trending?limit=12');
+        const data = await res.json();
+        if (res.ok) {
+          setTrendingFiles(data.files);
+        }
+      } catch (error) {
+        console.error('Failed to fetch trending files:', error);
+      } finally {
+        setTrendingLoading(false);
+      }
+    }
+    fetchTrending();
+  }, []);
 
   // Debounce search query
   useEffect(() => {
@@ -115,7 +138,7 @@ export default function ExplorePage() {
 
       {/* Results */}
       {!hasSearched && !query.trim() ? (
-        <EmptySearchState />
+        <EmptySearchState trendingFiles={trendingFiles} trendingLoading={trendingLoading} />
       ) : results.length === 0 && hasSearched && !loading ? (
         <NoResultsState query={debouncedQuery} />
       ) : (
@@ -184,6 +207,19 @@ interface SearchResult {
   rank: number;
 }
 
+interface TrendingFile {
+  id: string;
+  path: string;
+  starCount: number;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    username: string;
+    name: string | null;
+    avatar: string | null;
+  };
+}
+
 // =============================================================================
 // COMPONENTS
 // =============================================================================
@@ -244,24 +280,129 @@ function SearchResultCard({ result }: { result: SearchResult }) {
 }
 
 /**
+ * Trending files section showing most popular files by star count.
+ */
+function TrendingSection({ files, loading }: { files: TrendingFile[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-12">
+        <div className="mb-6 flex items-center gap-2">
+          <TrendingIcon className="h-5 w-5 text-[var(--primary)]" />
+          <h2 className="text-xl font-semibold">Trending</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--card)]"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-12">
+      <div className="mb-6 flex items-center gap-2">
+        <TrendingIcon className="h-5 w-5 text-[var(--primary)]" />
+        <h2 className="text-xl font-semibold">Trending</h2>
+        <span className="text-sm text-[var(--muted-foreground)]">Most starred files</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {files.map((file, index) => (
+          <TrendingFileCard key={file.id} file={file} rank={index + 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Individual trending file card with rank badge.
+ */
+function TrendingFileCard({ file, rank }: { file: TrendingFile; rank: number }) {
+  const fileUrl = `/${file.user.username}/${file.path}`;
+
+  return (
+    <Link
+      href={fileUrl}
+      className="group relative flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition-all hover:bg-[var(--secondary)]/50 hover:border-[var(--primary)]/30"
+    >
+      {/* Rank badge */}
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+        rank === 1
+          ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+          : rank === 2
+          ? 'bg-gray-300/30 text-gray-600 dark:text-gray-400'
+          : rank === 3
+          ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400'
+          : 'bg-[var(--muted)] text-[var(--muted-foreground)]'
+      }`}>
+        {rank}
+      </div>
+
+      {/* File info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate font-medium text-[var(--primary)] group-hover:underline">
+            {file.path}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+          {file.user.avatar ? (
+            <img
+              src={file.user.avatar}
+              alt={file.user.username}
+              className="h-4 w-4 rounded-full"
+            />
+          ) : (
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--muted)]">
+              <UserIcon className="h-2.5 w-2.5" />
+            </div>
+          )}
+          <span className="truncate">{file.user.username}</span>
+        </div>
+      </div>
+
+      {/* Star count */}
+      <div className="flex items-center gap-1 text-sm font-medium text-[var(--muted-foreground)]">
+        <StarFilledIcon className="h-4 w-4 text-yellow-500" />
+        {file.starCount}
+      </div>
+    </Link>
+  );
+}
+
+/**
  * Empty state shown before user starts searching.
  */
-function EmptySearchState() {
+function EmptySearchState({ trendingFiles, trendingLoading }: { trendingFiles: TrendingFile[]; trendingLoading: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--muted)]">
-        <CompassIcon className="h-8 w-8 text-[var(--muted-foreground)]" />
-      </div>
-      <h2 className="text-xl font-semibold">Start exploring</h2>
-      <p className="mt-2 max-w-sm text-center text-[var(--muted-foreground)]">
-        Search for SOUL.md files, AGENTS.md configurations, system prompts, and other markdown
-        shared by the community.
-      </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <SuggestionPill query="SOUL.md" />
-        <SuggestionPill query="AGENTS.md" />
-        <SuggestionPill query="system prompt" />
-        <SuggestionPill query="coding agent" />
+    <div>
+      {/* Trending section */}
+      <TrendingSection files={trendingFiles} loading={trendingLoading} />
+
+      {/* Search suggestions */}
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--muted)]">
+          <CompassIcon className="h-8 w-8 text-[var(--muted-foreground)]" />
+        </div>
+        <h2 className="text-xl font-semibold">Start exploring</h2>
+        <p className="mt-2 max-w-sm text-center text-[var(--muted-foreground)]">
+          Search for SOUL.md files, AGENTS.md configurations, system prompts, and other markdown
+          shared by the community.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <SuggestionPill query="SOUL.md" />
+          <SuggestionPill query="AGENTS.md" />
+          <SuggestionPill query="system prompt" />
+          <SuggestionPill query="coding agent" />
+        </div>
       </div>
     </div>
   );
@@ -402,6 +543,37 @@ function CompassIcon({ className }: { className?: string }) {
     >
       <circle cx="12" cy="12" r="10" />
       <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+    </svg>
+  );
+}
+
+function TrendingIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+}
+
+function StarFilledIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   );
 }
