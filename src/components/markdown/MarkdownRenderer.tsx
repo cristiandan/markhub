@@ -5,11 +5,143 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from 'next-themes';
-import { useState, useEffect, ComponentPropsWithoutRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** Show line numbers in code blocks (default: true for blocks with >5 lines) */
+  showLineNumbers?: boolean | 'auto';
+}
+
+/** Copy button component for code blocks */
+function CopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, [code]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-2 py-1 text-xs rounded hover:bg-white/10 transition-colors"
+      title={copied ? 'Copied!' : 'Copy code'}
+    >
+      {copied ? (
+        <>
+          <CheckIcon className="w-3.5 h-3.5" />
+          <span>Copied</span>
+        </>
+      ) : (
+        <>
+          <CopyIcon className="w-3.5 h-3.5" />
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+/** Language display names for common languages */
+const languageNames: Record<string, string> = {
+  js: 'JavaScript',
+  javascript: 'JavaScript',
+  ts: 'TypeScript',
+  typescript: 'TypeScript',
+  jsx: 'JSX',
+  tsx: 'TSX',
+  py: 'Python',
+  python: 'Python',
+  rb: 'Ruby',
+  ruby: 'Ruby',
+  go: 'Go',
+  rust: 'Rust',
+  rs: 'Rust',
+  java: 'Java',
+  cpp: 'C++',
+  c: 'C',
+  cs: 'C#',
+  csharp: 'C#',
+  php: 'PHP',
+  swift: 'Swift',
+  kotlin: 'Kotlin',
+  scala: 'Scala',
+  sh: 'Shell',
+  bash: 'Bash',
+  zsh: 'Zsh',
+  fish: 'Fish',
+  powershell: 'PowerShell',
+  ps1: 'PowerShell',
+  sql: 'SQL',
+  html: 'HTML',
+  css: 'CSS',
+  scss: 'SCSS',
+  sass: 'Sass',
+  less: 'Less',
+  json: 'JSON',
+  yaml: 'YAML',
+  yml: 'YAML',
+  xml: 'XML',
+  md: 'Markdown',
+  markdown: 'Markdown',
+  graphql: 'GraphQL',
+  gql: 'GraphQL',
+  dockerfile: 'Dockerfile',
+  docker: 'Docker',
+  makefile: 'Makefile',
+  make: 'Makefile',
+  text: 'Plain Text',
+  txt: 'Plain Text',
+  prisma: 'Prisma',
+  toml: 'TOML',
+  ini: 'INI',
+  env: 'Environment',
+};
+
+function getLanguageDisplayName(lang: string): string {
+  return languageNames[lang.toLowerCase()] || lang.toUpperCase();
 }
 
 /**
@@ -18,9 +150,15 @@ interface MarkdownRendererProps {
  * Features:
  * - GitHub Flavored Markdown (tables, strikethrough, task lists, autolinks)
  * - Syntax highlighting with Prism (adapts to light/dark theme)
+ * - Copy button on code blocks
+ * - Line numbers for longer code blocks
  * - Styled prose with proper spacing and typography
  */
-export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+export function MarkdownRenderer({ 
+  content, 
+  className = '',
+  showLineNumbers = 'auto'
+}: MarkdownRendererProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -36,7 +174,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Code blocks with syntax highlighting
+          // Code blocks with syntax highlighting, copy button, and line numbers
           code({ className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || '');
             const isInline = !match && !className;
@@ -53,19 +191,50 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
               );
             }
 
+            const language = match?.[1] || 'text';
+            const lineCount = code.split('\n').length;
+            
+            // Show line numbers based on prop: always, never, or auto (>5 lines)
+            const shouldShowLineNumbers = 
+              showLineNumbers === true || 
+              (showLineNumbers === 'auto' && lineCount > 5);
+
             return (
-              <SyntaxHighlighter
-                style={codeStyle}
-                language={match?.[1] || 'text'}
-                PreTag="div"
-                customStyle={{
-                  margin: 0,
-                  borderRadius: '0.5rem',
-                  fontSize: '0.875rem',
-                }}
-              >
-                {code}
-              </SyntaxHighlighter>
+              <div className="relative group my-4 rounded-lg overflow-hidden border border-[var(--border)]">
+                {/* Code block header with language and copy button */}
+                <div className="flex items-center justify-between px-4 py-2 bg-[var(--muted)] border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+                  <span className="font-medium">{getLanguageDisplayName(language)}</span>
+                  <CopyButton code={code} />
+                </div>
+                
+                {/* Syntax highlighted code */}
+                <SyntaxHighlighter
+                  style={codeStyle}
+                  language={language}
+                  PreTag="div"
+                  showLineNumbers={shouldShowLineNumbers}
+                  lineNumberStyle={{
+                    minWidth: '2.5em',
+                    paddingRight: '1em',
+                    color: 'var(--muted-foreground)',
+                    opacity: 0.5,
+                    userSelect: 'none',
+                  }}
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: 0,
+                    fontSize: '0.875rem',
+                    background: 'transparent',
+                  }}
+                  codeTagProps={{
+                    style: {
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                    },
+                  }}
+                >
+                  {code}
+                </SyntaxHighlighter>
+              </div>
             );
           },
 
