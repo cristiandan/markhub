@@ -1,3 +1,4 @@
+import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
@@ -21,6 +22,109 @@ interface FilePageProps {
     username: string;
     path: string[];
   }>;
+}
+
+/**
+ * Generate metadata for the file view page.
+ * Provides OpenGraph tags for social sharing.
+ */
+export async function generateMetadata({ params }: FilePageProps): Promise<Metadata> {
+  const { username, path: pathSegments } = await params;
+  const filePath = pathSegments.join('/');
+
+  // Look up the user
+  const user = await db.user.findUnique({
+    where: { username },
+    select: { id: true, username: true, name: true },
+  });
+
+  if (!user) {
+    return { title: 'File Not Found' };
+  }
+
+  // Look up the file
+  const file = await db.file.findUnique({
+    where: {
+      userId_path: {
+        userId: user.id,
+        path: filePath,
+      },
+    },
+    select: {
+      path: true,
+      content: true,
+      visibility: true,
+      starCount: true,
+    },
+  });
+
+  // Don't expose metadata for private files or non-existent files
+  if (!file || file.visibility === 'PRIVATE') {
+    return { title: 'File Not Found' };
+  }
+
+  const fileName = filePath.split('/').pop() || filePath;
+  const displayName = user.name || user.username;
+  
+  // Extract first paragraph or heading as description (max 200 chars)
+  const description = extractDescription(file.content);
+  
+  const title = `${fileName} by ${displayName}`;
+  const url = `https://markhub.md/${username}/${filePath}`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+      type: 'article',
+      authors: [displayName],
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
+  };
+}
+
+/**
+ * Extract a description from markdown content.
+ * Takes the first paragraph or heading, strips markdown, truncates to 200 chars.
+ */
+function extractDescription(content: string): string {
+  // Remove code blocks
+  let text = content.replace(/```[\s\S]*?```/g, '');
+  
+  // Remove inline code
+  text = text.replace(/`[^`]+`/g, '');
+  
+  // Remove headers markup but keep text
+  text = text.replace(/^#{1,6}\s+/gm, '');
+  
+  // Remove links but keep text
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  
+  // Remove images
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+  
+  // Remove bold/italic markers
+  text = text.replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1');
+  
+  // Get first non-empty paragraph
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+  const firstPara = paragraphs[0] || '';
+  
+  // Clean up whitespace and truncate
+  const cleaned = firstPara.replace(/\s+/g, ' ').trim();
+  
+  if (cleaned.length <= 200) {
+    return cleaned || 'A markdown file on Markhub';
+  }
+  
+  return cleaned.slice(0, 197) + '...';
 }
 
 export default async function FilePage({ params }: FilePageProps) {
