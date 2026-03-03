@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { SessionProvider } from '@/components/auth/SessionProvider';
 import { ThemeProvider } from '@/components/theme';
@@ -24,6 +24,20 @@ export const metadata: Metadata = {
   },
   description: 'Share and discover markdown files. The GitHub for agent configs, prompt libraries, and documentation.',
   metadataBase: new URL(siteUrl),
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/apple-icon', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Markhub',
+  },
   openGraph: {
     title: 'Markhub',
     description: 'Share and discover markdown files. The GitHub for agent configs, prompt libraries, and documentation.',
@@ -42,6 +56,16 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#1a1a2e' },
+  ],
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
