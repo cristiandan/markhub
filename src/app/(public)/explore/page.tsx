@@ -26,9 +26,13 @@ export default function ExplorePage() {
   const [trendingFiles, setTrendingFiles] = useState<TrendingFile[]>([]);
   const [trendingLoading, setTrendingLoading] = useState(true);
 
+  // Recent files state
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
+
   const LIMIT = 20;
 
-  // Fetch trending files on mount
+  // Fetch trending and recent files on mount
   useEffect(() => {
     async function fetchTrending() {
       try {
@@ -43,7 +47,23 @@ export default function ExplorePage() {
         setTrendingLoading(false);
       }
     }
+
+    async function fetchRecent() {
+      try {
+        const res = await fetch('/api/recent?limit=12');
+        const data = await res.json();
+        if (res.ok) {
+          setRecentFiles(data.files);
+        }
+      } catch (error) {
+        console.error('Failed to fetch recent files:', error);
+      } finally {
+        setRecentLoading(false);
+      }
+    }
+
     fetchTrending();
+    fetchRecent();
   }, []);
 
   // Debounce search query
@@ -138,7 +158,12 @@ export default function ExplorePage() {
 
       {/* Results */}
       {!hasSearched && !query.trim() ? (
-        <EmptySearchState trendingFiles={trendingFiles} trendingLoading={trendingLoading} />
+        <EmptySearchState 
+          trendingFiles={trendingFiles} 
+          trendingLoading={trendingLoading}
+          recentFiles={recentFiles}
+          recentLoading={recentLoading}
+        />
       ) : results.length === 0 && hasSearched && !loading ? (
         <NoResultsState query={debouncedQuery} />
       ) : (
@@ -208,6 +233,19 @@ interface SearchResult {
 }
 
 interface TrendingFile {
+  id: string;
+  path: string;
+  starCount: number;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    username: string;
+    name: string | null;
+    avatar: string | null;
+  };
+}
+
+interface RecentFile {
   id: string;
   path: string;
   starCount: number;
@@ -379,13 +417,121 @@ function TrendingFileCard({ file, rank }: { file: TrendingFile; rank: number }) 
 }
 
 /**
+ * Recent files section showing newly uploaded files.
+ */
+function RecentSection({ files, loading }: { files: RecentFile[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-12">
+        <div className="mb-6 flex items-center gap-2">
+          <ClockIcon className="h-5 w-5 text-[var(--primary)]" />
+          <h2 className="text-xl font-semibold">Recent</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="h-24 animate-pulse rounded-xl border border-[var(--border)] bg-[var(--card)]"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-12">
+      <div className="mb-6 flex items-center gap-2">
+        <ClockIcon className="h-5 w-5 text-[var(--primary)]" />
+        <h2 className="text-xl font-semibold">Recent</h2>
+        <span className="text-sm text-[var(--muted-foreground)]">Newly uploaded files</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {files.map((file) => (
+          <RecentFileCard key={file.id} file={file} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Individual recent file card.
+ */
+function RecentFileCard({ file }: { file: RecentFile }) {
+  const fileUrl = `/${file.user.username}/${file.path}`;
+
+  return (
+    <Link
+      href={fileUrl}
+      className="group relative flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition-all hover:bg-[var(--secondary)]/50 hover:border-[var(--primary)]/30"
+    >
+      {/* File icon */}
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--muted)]">
+        <FileIcon className="h-4 w-4 text-[var(--muted-foreground)]" />
+      </div>
+
+      {/* File info */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate font-medium text-[var(--primary)] group-hover:underline">
+            {file.path}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+          {file.user.avatar ? (
+            <img
+              src={file.user.avatar}
+              alt={file.user.username}
+              className="h-4 w-4 rounded-full"
+            />
+          ) : (
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--muted)]">
+              <UserIcon className="h-2.5 w-2.5" />
+            </div>
+          )}
+          <span className="truncate">{file.user.username}</span>
+          <span>•</span>
+          <span>{formatRelativeTime(new Date(file.createdAt))}</span>
+        </div>
+      </div>
+
+      {/* Star count (if any) */}
+      {file.starCount > 0 && (
+        <div className="flex items-center gap-1 text-sm font-medium text-[var(--muted-foreground)]">
+          <StarIcon className="h-3.5 w-3.5" />
+          {file.starCount}
+        </div>
+      )}
+    </Link>
+  );
+}
+
+/**
  * Empty state shown before user starts searching.
  */
-function EmptySearchState({ trendingFiles, trendingLoading }: { trendingFiles: TrendingFile[]; trendingLoading: boolean }) {
+function EmptySearchState({ 
+  trendingFiles, 
+  trendingLoading,
+  recentFiles,
+  recentLoading,
+}: { 
+  trendingFiles: TrendingFile[]; 
+  trendingLoading: boolean;
+  recentFiles: RecentFile[];
+  recentLoading: boolean;
+}) {
   return (
     <div>
       {/* Trending section */}
       <TrendingSection files={trendingFiles} loading={trendingLoading} />
+
+      {/* Recent section */}
+      <RecentSection files={recentFiles} loading={recentLoading} />
 
       {/* Search suggestions */}
       <div className="flex flex-col items-center justify-center py-12 px-4">
@@ -574,6 +720,45 @@ function StarFilledIcon({ className }: { className?: string }) {
       className={className}
     >
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function FileIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <polyline points="10 9 9 9 8 9" />
     </svg>
   );
 }
